@@ -1,0 +1,48 @@
+name: Heti sajtófigyelő frissítés
+
+on:
+  schedule:
+    # Minden hétfőn 07:00 UTC (09:00 Magyar idő)
+    - cron: "0 7 * * 1"
+  workflow_dispatch:          # kézi futtatás is lehetséges
+
+permissions:
+  contents: write             # szükséges a commit+push-hoz
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Repo checkout
+        uses: actions/checkout@v4
+
+      - name: Python beállítása
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Függőségek telepítése
+        run: pip install requests python-docx
+
+      - name: Sajtófigyelő generálás
+        env:
+          PR_SENDER_EMAIL:    ${{ secrets.PR_SENDER_EMAIL }}
+          MS_CLIENT_ID:       ${{ secrets.MS_CLIENT_ID }}
+          MS_CLIENT_SECRET:   ${{ secrets.MS_CLIENT_SECRET }}
+          MS_TENANT_ID:       ${{ secrets.MS_TENANT_ID }}
+          MS_USER_EMAIL:      ${{ secrets.MS_USER_EMAIL }}
+          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/generate.py
+
+      - name: Commit és push ha változott
+        run: |
+          git config user.name  "sajtofigyelő-bot"
+          git config user.email "bot@github-actions"
+          git add docs/index.html
+          if git diff --cached --quiet; then
+            echo "Nincs változás, nincs commit."
+          else
+            git commit -m "🗞️ Sajtófigyelő frissítve: $(date +%Y-%m-%d)"
+            git push
+          fi
