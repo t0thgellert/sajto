@@ -1,51 +1,47 @@
-name: Heti sajtófigyelő frissítés
+name: Sajtófigyelő – ellenőrzés és push
 
 on:
   schedule:
-    # Minden hétfőn 07:00 UTC = 09:00 magyar idő
-    - cron: "0 7 * * 1"
+    # Minden hétfőn 10:00 UTC = 12:00 magyar idő
+    # (2 órával a CoWork futása után – ha CoWork már push-olt, ez nem csinál semmit)
+    - cron: "0 10 * * 1"
   workflow_dispatch:   # kézi futtatás is lehetséges
 
 permissions:
-  contents: write      # szükséges a commit + push-hoz
+  contents: write
 
 jobs:
-  generate:
+  check:
     runs-on: ubuntu-latest
-    timeout-minutes: 15  # ha valami elakad, ne fusson örökké
+    timeout-minutes: 5
 
     steps:
 
       - name: Repo checkout
         uses: actions/checkout@v4
 
-      - name: Python beállítása
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "pip"   # pip cache → gyorsabb következő futás
-
-      - name: Függőségek telepítése
-        run: pip install requests python-docx lxml
-
-      - name: Sajtófigyelő generálás
-        env:
-          PR_SENDER_EMAIL:   ${{ secrets.PR_SENDER_EMAIL }}
-          MS_CLIENT_ID:      ${{ secrets.MS_CLIENT_ID }}
-          MS_CLIENT_SECRET:  ${{ secrets.MS_CLIENT_SECRET }}
-          MS_TENANT_ID:      ${{ secrets.MS_TENANT_ID }}
-          MS_USER_EMAIL:     ${{ secrets.MS_USER_EMAIL }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python scripts/generate.py
-
-      - name: Commit és push ha változott
+      - name: Ellenőrzés – frissült-e az index.html ezen a héten?
+        id: check
         run: |
-          git config user.name  "sajtofigyelő-bot"
-          git config user.email "bot@github-actions"
-          git add docs/index.html
-          if git diff --cached --quiet; then
-            echo "Nincs változás, nincs commit."
+          LAST_COMMIT=$(git log -1 --format="%ci" -- docs/index.html)
+          echo "Utolsó módosítás: $LAST_COMMIT"
+
+          # Ha az utolsó módosítás dátuma ezen a héten van, nincs teendő
+          LAST_MON=$(date -d "last monday" +%Y-%m-%d 2>/dev/null || date -v-mon +%Y-%m-%d)
+          LAST_DATE=$(echo "$LAST_COMMIT" | cut -c1-10)
+
+          if [[ "$LAST_DATE" > "$LAST_MON" || "$LAST_DATE" == "$LAST_MON" ]]; then
+            echo "fresh=true" >> $GITHUB_OUTPUT
+            echo "✅ Az index.html már frissült ezen a héten ($LAST_DATE) – nincs teendő."
           else
-            git commit -m "🗞️ Sajtófigyelő frissítve: $(date +%Y-%m-%d)"
-            git push
+            echo "fresh=false" >> $GITHUB_OUTPUT
+            echo "⚠️  Az index.html nem frissült ezen a héten. Utolsó frissítés: $LAST_DATE"
           fi
+
+      - name: Értesítés ha nem frissült
+        if: steps.check.outputs.fresh == 'false'
+        run: |
+          echo "::warning::A sajtófigyelő NEM frissült ezen a héten!"
+          echo "::warning::Ellenőrizd a CoWork futását, vagy indítsd el manuálisan."
+          # Ha szeretnél email értesítést, itt tudsz GitHub notification-t triggerelni.
+          exit 1   # Piros státusz = látható figyelmeztetés a GitHub Actions oldalon
