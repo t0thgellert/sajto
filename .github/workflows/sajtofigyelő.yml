@@ -1,14 +1,14 @@
-name: Sajtófigyelő – ellenőrzés és push
+name: Sajtófigyelő – heti frissülés ellenőrzése
 
 on:
   schedule:
     # Minden hétfőn 10:00 UTC = 12:00 magyar idő
-    # (2 órával a CoWork futása után – ha CoWork már push-olt, ez nem csinál semmit)
+    # (a feldolgozó workflow / CoWork futása UTÁN)
     - cron: "0 10 * * 1"
-  workflow_dispatch:   # kézi futtatás is lehetséges
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   check:
@@ -19,29 +19,23 @@ jobs:
 
       - name: Repo checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # teljes git history kell a log-hoz
 
-      - name: Ellenőrzés – frissült-e az index.html ezen a héten?
-        id: check
+      - name: Frissült-e az index.html ezen a héten?
         run: |
           LAST_COMMIT=$(git log -1 --format="%ci" -- docs/index.html)
-          echo "Utolsó módosítás: $LAST_COMMIT"
-
-          # Ha az utolsó módosítás dátuma ezen a héten van, nincs teendő
-          LAST_MON=$(date -d "last monday" +%Y-%m-%d 2>/dev/null || date -v-mon +%Y-%m-%d)
           LAST_DATE=$(echo "$LAST_COMMIT" | cut -c1-10)
+          echo "Utolsó index.html módosítás: $LAST_DATE"
 
-          if [[ "$LAST_DATE" > "$LAST_MON" || "$LAST_DATE" == "$LAST_MON" ]]; then
-            echo "fresh=true" >> $GITHUB_OUTPUT
-            echo "✅ Az index.html már frissült ezen a héten ($LAST_DATE) – nincs teendő."
-          else
-            echo "fresh=false" >> $GITHUB_OUTPUT
-            echo "⚠️  Az index.html nem frissült ezen a héten. Utolsó frissítés: $LAST_DATE"
+          # A FOLYÓ hét hétfője (nem az előzőé!):
+          # %u = a hét napja 1–7 (hétfő=1) → ennyi-1 napot vonunk ki a mai dátumból
+          MON_THIS_WEEK=$(date -d "-$(( $(date +%u) - 1 )) days" +%Y-%m-%d)
+          echo "E hét hétfője: $MON_THIS_WEEK"
+
+          if [[ "$LAST_DATE" < "$MON_THIS_WEEK" ]]; then
+            echo "::warning::A sajtófigyelő NEM frissült ezen a héten! Utolsó frissítés: $LAST_DATE"
+            echo "::warning::Ellenőrizd a feldolgozó workflow-t / CoWork futását."
+            exit 1
           fi
-
-      - name: Értesítés ha nem frissült
-        if: steps.check.outputs.fresh == 'false'
-        run: |
-          echo "::warning::A sajtófigyelő NEM frissült ezen a héten!"
-          echo "::warning::Ellenőrizd a CoWork futását, vagy indítsd el manuálisan."
-          # Ha szeretnél email értesítést, itt tudsz GitHub notification-t triggerelni.
-          exit 1   # Piros státusz = látható figyelmeztetés a GitHub Actions oldalon
+          echo "✅ Az index.html friss ($LAST_DATE) – nincs teendő."
