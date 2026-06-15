@@ -35,7 +35,9 @@ from lxml import etree  # noqa: F401 – indirekt használat a docx-on belül
 
 # ── Konfiguráció ──────────────────────────────────────────────────────────────
 
-SENDER_EMAIL     = os.environ["PR_SENDER_EMAIL"]
+# Tárgy-alapú szűrés: a feladó BÁRKI lehet (közvetlen vagy továbbított levél)
+SUBJECT_KEYWORD  = os.environ.get("SUBJECT_KEYWORD", "piaci körkép")
+SENDER_EMAIL     = os.environ.get("PR_SENDER_EMAIL", "")  # már nem kötelező
 GRAPH_CLIENT_ID  = os.environ["MS_CLIENT_ID"]
 GRAPH_CLIENT_SEC = os.environ["MS_CLIENT_SECRET"]
 GRAPH_TENANT_ID  = os.environ["MS_TENANT_ID"]
@@ -44,7 +46,7 @@ ANTHROPIC_KEY    = os.environ["ANTHROPIC_API_KEY"]
 OUTPUT_FILE      = Path("docs/index.html")
 
 # Hány legfrissebb emailt vizsgálunk (ha az első nem tartalmaz .docx mellékletet)
-EMAIL_SEARCH_TOP = 10
+EMAIL_SEARCH_TOP = 25
 
 # Domain → olvasható forrás név
 DOMAIN_MAP: dict[str, str] = {
@@ -156,14 +158,20 @@ def _graph_get(token: str, path: str, **kwargs) -> dict:
 def fetch_latest_docx(token: str) -> tuple[str, bytes]:
     """
     Visszaadja a legújabb .docx melléklet (subject, bytes) párját.
-    EMAIL_SEARCH_TOP emailt vizsgál a feladótól.
+
+    TÁRGY-ALAPÚ keresés: a legutóbbi EMAIL_SEARCH_TOP emailt vizsgálja,
+    és azt fogadja el, amelynek tárgya tartalmazza a SUBJECT_KEYWORD-öt.
+    Így működik közvetlen küldésnél ÉS továbbított (FW:) levélnél is,
+    függetlenül attól, ki a feladó.
     """
     msgs = _graph_get(token, f"/users/{GRAPH_USER_EMAIL}/messages", params={
-        "$filter":  f"from/emailAddress/address eq '{SENDER_EMAIL}'",
         "$orderby": "receivedDateTime desc",
         "$top":     str(EMAIL_SEARCH_TOP),
         "$select":  "id,subject,receivedDateTime,hasAttachments",
     }).get("value", [])
+
+    keyword = SUBJECT_KEYWORD.lower()
+    msgs = [m for m in msgs if keyword in (m.get("subject") or "").lower()]
 
     for msg in msgs:
         if not msg.get("hasAttachments"):
@@ -178,8 +186,8 @@ def fetch_latest_docx(token: str) -> tuple[str, bytes]:
                 return msg["subject"], base64.b64decode(att["contentBytes"])
 
     raise RuntimeError(
-        f"Nem találtam .docx mellékletet {SENDER_EMAIL} "
-        f"legutóbbi {EMAIL_SEARCH_TOP} levelében."
+        f"Nem találtam '{SUBJECT_KEYWORD}' tárgyú emailt .docx melléklettel "
+        f"a legutóbbi {EMAIL_SEARCH_TOP} levél között."
     )
 
 
