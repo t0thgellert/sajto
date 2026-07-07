@@ -221,12 +221,7 @@ def write_html(repo: Path, db: dict) -> None:
     _, start, end = read_db(html)
     db_json = json.dumps(db, ensure_ascii=False, separators=(",", ":"))
     html = html[:start] + f"const DB = {db_json}" + html[end:]
-    weeks = sorted({c["het"] for c in db["cikkek"] if c.get("het")}, reverse=True)
-    opts = "\n      ".join(
-        f'<option value="{w}">{_week_label(w)}</option>' for w in weeks)
-    html = re.sub(
-        r'(<option value="">Összes hét</option>).*?(</select>)',
-        f"\\1\n      {opts}\n    \\2", html, flags=re.DOTALL)
+    # A hét-legördülőt a kliensoldali JS építi a DB-ből — itt nem nyúlunk hozzá.
     out.write_text(html, encoding="utf-8")
 
 # ── State ─────────────────────────────────────────────────────────────────────
