@@ -1,3 +1,4 @@
+name: Sajtófigyelő – heti frissülés ellenőrzése
 
 on:
   schedule:
