@@ -1,10 +1,8 @@
-name: Sajtófigyelő – heti frissülés ellenőrzése
 
 on:
   schedule:
-    # Minden hétfőn 10:00 UTC = 12:00 magyar idő
-    # (a feldolgozó workflow / CoWork futása UTÁN)
-    - cron: "0 10 * * 1"
+    # Hétfő 15:30 UTC = 17:30 magyar idő (a Cowork 16:00-s futása után)
+    - cron: "30 15 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -20,22 +18,18 @@ jobs:
       - name: Repo checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # teljes git history kell a log-hoz
+          fetch-depth: 0
 
-      - name: Frissült-e az index.html ezen a héten?
+      - name: Frissült-e az index.html az elmúlt 8 napban?
         run: |
-          LAST_COMMIT=$(git log -1 --format="%ci" -- docs/index.html)
-          LAST_DATE=$(echo "$LAST_COMMIT" | cut -c1-10)
-          echo "Utolsó index.html módosítás: $LAST_DATE"
+          LAST_COMMIT=$(git log -1 --format="%ct" -- docs/index.html)
+          NOW=$(date +%s)
+          AGE_DAYS=$(( (NOW - LAST_COMMIT) / 86400 ))
+          echo "Utolsó index.html módosítás: $(git log -1 --format='%ci' -- docs/index.html)  (${AGE_DAYS} napja)"
 
-          # A FOLYÓ hét hétfője (nem az előzőé!):
-          # %u = a hét napja 1–7 (hétfő=1) → ennyi-1 napot vonunk ki a mai dátumból
-          MON_THIS_WEEK=$(date -d "-$(( $(date +%u) - 1 )) days" +%Y-%m-%d)
-          echo "E hét hétfője: $MON_THIS_WEEK"
-
-          if [[ "$LAST_DATE" < "$MON_THIS_WEEK" ]]; then
-            echo "::warning::A sajtófigyelő NEM frissült ezen a héten! Utolsó frissítés: $LAST_DATE"
-            echo "::warning::Ellenőrizd a feldolgozó workflow-t / CoWork futását."
+          if [ "$AGE_DAYS" -gt 8 ]; then
+            echo "::warning::A sajtófigyelő ${AGE_DAYS} napja NEM frissült!"
+            echo "::warning::Ellenőrizd a Cowork scheduled task futását (hétfő/péntek 16:00)."
             exit 1
           fi
-          echo "✅ Az index.html friss ($LAST_DATE) – nincs teendő."
+          echo "✅ Az index.html friss (${AGE_DAYS} napja módosult) – nincs teendő."
