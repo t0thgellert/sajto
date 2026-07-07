@@ -210,6 +210,10 @@
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
+      /* a dőlt betű túlnyúlása ne vágódjon le: kifestett tartomány bővítése */
+      display: inline-block;
+      padding: 0.06em 0.14em 0.1em 0.02em;
+      margin: -0.06em -0.14em -0.1em -0.02em;
     }
     .hero-sub {
       font-size: 12px;
