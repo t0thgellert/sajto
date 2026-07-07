@@ -774,7 +774,7 @@ function cardHtml(a, badgeCls) {
   const title = a.url
     ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(cim)}</a>`
     : esc(cim);
-  const weekLabel = weekLabel(a.het);
+  const wkLbl = weekLabel(a.het);
   const summary = a.osszefoglalo && a.osszefoglalo !== a.cim
     ? `<div class="card-summary">${esc(cleanText(a.osszefoglalo).substring(0,280))}${cleanText(a.osszefoglalo).length>280?'…':''}</div>` : '';
   const tags = a.kulcsszavak.map(t =>
@@ -789,7 +789,7 @@ function cardHtml(a, badgeCls) {
       <span class="meta-source">${esc(a.forras)}</span>
       <span class="meta-dot">·</span>
       <span>${esc(a.datum||'')}</span>
-      <span class="meta-week">${esc(weekLabel)}</span>
+      <span class="meta-week">${esc(wkLbl)}</span>
     </div>
     ${summary}
     <div class="card-footer">${tags}</div>
