@@ -6,25 +6,30 @@
   <title>Prohuman — Sajtófigyelő 2026</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;1,400&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
 
     :root {
-      --blue-dark:  #001D35;
-      --blue-ph:    #0245EB;
-      --blue-ls:    #66CCFF;
+      --navy-deep:  #00041F;
+      --blue-dark:  #000073;
+      --blue-ph:    #0345EB;
+      --blue-ls:    #2E9CFF;
+      --teal:       #00A89E;
+      --teal-br:    #1FD8C7;
+      --ink:        #0B1424;
+      --ink-soft:   #4A5468;
       --grey-light: #DCDDDE;
-      --grey-bg:    #F2F5FA;
-      --orange:     #FF8715;
-      --green:      #1a7f4b;
+      --grey-bg:    #F1F6FF;
+      --line:       #E2E9F5;
+      --green:      #00A89E;
       --red:        #c0392b;
-      --gradient:   linear-gradient(135deg, #66CCFF 0%, #0245EB 100%);
+      --gradient:   linear-gradient(135deg, #000073 0%, #0345EB 58%, #2E9CFF 100%);
+      --gradient-accent: linear-gradient(110deg, #2E9CFF 0%, #1FD8C7 100%);
       --radius-pill: 200px;
-      --radius-card: 14px;
-      --shadow-card: 0 2px 12px rgba(0,29,53,.07), 0 1px 3px rgba(0,29,53,.05);
-      --shadow-hover: 0 8px 28px rgba(2,69,235,.13), 0 2px 6px rgba(0,29,53,.08);
+      --radius-card: 16px;
+      --shadow-card: 0 2px 12px rgba(3,69,235,.06), 0 1px 3px rgba(0,12,40,.05);
+      --shadow-hover: 0 16px 48px rgba(3,69,235,.14), 0 2px 6px rgba(0,12,40,.08);
     }
 
     body {
@@ -136,7 +141,7 @@
 
     /* ─── HERO STRIP ─── */
     .hero-strip {
-      background: var(--blue-dark);
+      background: var(--gradient);
       padding: 36px 0 44px;
       position: relative;
       overflow: hidden;
@@ -147,7 +152,7 @@
       position: absolute;
       bottom: 0; left: 0; right: 0;
       height: 3px;
-      background: var(--gradient);
+      background: var(--gradient-accent);
     }
     /* decorative dot-grid pattern */
     .hero-strip::before {
@@ -155,8 +160,8 @@
       position: absolute;
       inset: 0;
       background-image:
-        radial-gradient(circle at 72% 18%, rgba(102,204,255,.18) 0%, transparent 55%),
-        radial-gradient(circle at 90% 80%, rgba(2,69,235,.22) 0%, transparent 40%),
+        radial-gradient(circle at 72% 18%, rgba(46,156,255,.18) 0%, transparent 55%),
+        radial-gradient(circle at 90% 80%, rgba(3,69,235,.22) 0%, transparent 40%),
         url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='2' cy='2' r='1.2' fill='%2366CCFF' opacity='.10'/%3E%3C/svg%3E");
       background-repeat: no-repeat, no-repeat, repeat;
       pointer-events: none;
@@ -169,7 +174,7 @@
       width: 480px;
       height: 480px;
       border-radius: 50%;
-      background: radial-gradient(circle at 40% 40%, rgba(102,204,255,.12), rgba(2,69,235,.08) 60%, transparent 80%);
+      background: radial-gradient(circle at 40% 40%, rgba(46,156,255,.12), rgba(3,69,235,.08) 60%, transparent 80%);
       pointer-events: none;
     }
     /* thin ring accent */
@@ -180,7 +185,7 @@
       width: 260px;
       height: 260px;
       border-radius: 50%;
-      border: 28px solid rgba(102,204,255,.07);
+      border: 28px solid rgba(46,156,255,.07);
       pointer-events: none;
     }
     .hero-inner {
@@ -191,7 +196,9 @@
       z-index: 1;
     }
     .hero-heading {
-      font-family: 'DM Serif Display', serif;
+      font-family: inherit;
+      font-weight: 800;
+      letter-spacing: -0.5px;
       font-size: clamp(28px, 3.5vw, 40px);
       color: #fff;
       line-height: 1.15;
@@ -352,7 +359,7 @@
       border-radius: var(--radius-pill);
       font-size: 11px;
       cursor: pointer;
-      border: 1px solid #d4d8e0;
+      border: 1px solid #E2E9F5;
       background: #fff;
       color: #555;
       transition: all .15s;
@@ -447,7 +454,7 @@
     .card {
       background: #fff;
       border-radius: var(--radius-card);
-      border: 1.5px solid #e8ecf2;
+      border: 1.5px solid var(--line);
       padding: 16px 18px;
       box-shadow: var(--shadow-card);
       transition: box-shadow .2s, border-color .2s, transform .15s;
@@ -458,7 +465,7 @@
     }
     .card:hover {
       box-shadow: var(--shadow-hover);
-      border-color: rgba(2,69,235,.2);
+      border-color: rgba(3,69,235,.2);
       transform: translateY(-1px);
     }
     .card.card-prohuman {
@@ -481,8 +488,8 @@
       margin-top: 2px;
       letter-spacing: .02em;
     }
-    .badge-prohuman { background: rgba(0,29,53,.08);  color: var(--blue-dark); }
-    .badge-piac     { background: rgba(2,69,235,.08); color: var(--blue-ph); }
+    .badge-prohuman { background: rgba(0,12,40,.08);  color: var(--blue-dark); }
+    .badge-piac     { background: rgba(3,69,235,.08); color: var(--blue-ph); }
     .badge-verseny  { background: rgba(26,127,75,.1); color: var(--green); }
     .card-title {
       font-size: 13px;
