@@ -738,12 +738,14 @@ function clearFilters() {
 // ─── TAG CLOUD ──────────────────────────────────────────────────────────────
 let tagCloudExpanded = false;
 const TAG_CLOUD_COLLAPSE_THRESHOLD = 12;
+const TAG_CLOUD_MAX = 80;
 
 function renderTagCloud() {
   const filtered = getFiltered();
   const counts = {};
   filtered.forEach(a => a.kulcsszavak.forEach(t => counts[t] = (counts[t]||0)+1));
-  const tags = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  const allTags = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  const tags = allTags.slice(0, TAG_CLOUD_MAX);
   const cloud = document.getElementById('tag-cloud');
   const toggle = document.getElementById('tag-cloud-toggle');
   if (!tags.length) { cloud.innerHTML = ''; toggle.style.display = 'none'; return; }
