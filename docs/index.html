@@ -390,13 +390,6 @@
       text-decoration: underline;
       user-select: none;
     }
-    .tag-group { margin-bottom: 4px; }
-    .tag-group-head {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
 
     /* ─── RESULTS BAR ─── */
     .results-bar {
@@ -636,21 +629,8 @@
 
 <!-- ═══ TAG CLOUD ═══ -->
 <div class="tag-section">
-  <div class="tag-group" id="tag-group-prohuman">
-    <div class="tag-group-head"><span class="section-dot dot-prohuman"></span><span class="toolbar-label" style="color:#888;">Prohuman</span></div>
-    <div class="tag-cloud" id="tag-cloud-prohuman"></div>
-    <div class="tag-cloud-toggle" id="tag-cloud-toggle-prohuman" onclick="toggleTagCloud('prohuman')"></div>
-  </div>
-  <div class="tag-group" id="tag-group-piac">
-    <div class="tag-group-head"><span class="section-dot dot-piac"></span><span class="toolbar-label" style="color:#888;">Piaci hírek</span></div>
-    <div class="tag-cloud" id="tag-cloud-piac"></div>
-    <div class="tag-cloud-toggle" id="tag-cloud-toggle-piac" onclick="toggleTagCloud('piac')"></div>
-  </div>
-  <div class="tag-group" id="tag-group-versenytars">
-    <div class="tag-group-head"><span class="section-dot dot-verseny"></span><span class="toolbar-label" style="color:#888;">Versenytársak</span></div>
-    <div class="tag-cloud" id="tag-cloud-versenytars"></div>
-    <div class="tag-cloud-toggle" id="tag-cloud-toggle-versenytars" onclick="toggleTagCloud('versenytars')"></div>
-  </div>
+  <div class="tag-cloud" id="tag-cloud"></div>
+  <div class="tag-cloud-toggle" id="tag-cloud-toggle" onclick="toggleTagCloud()"></div>
 </div>
 
 <!-- ═══ RESULTS BAR ═══ -->
@@ -756,16 +736,9 @@ function clearFilters() {
 }
 
 // ─── TAG CLOUD ──────────────────────────────────────────────────────────────
-// Csoportosítás a meglévő fokategória-taxonómia szerint (Prohuman / Piac / Versenytárs)
-// — ez a 3 kategória amúgy is létezik a "#pills-kat" szűrőben, ezért nem új,
-// kitalált logika, csak a meglévő rendszerezést visszük át a tag-felhőre is.
-const TAG_GROUP_META = {
-  prohuman:    { dot: 'dot-prohuman' },
-  piac:        { dot: 'dot-piac' },
-  versenytars: { dot: 'dot-verseny' },
-};
+let tagCloudExpanded = false;
 const TAG_CLOUD_COLLAPSE_THRESHOLD = 12;
-let tagCloudExpanded = { prohuman: false, piac: false, versenytars: false };
+const TAG_CLOUD_MAX = 100;
 
 // Néhány nyilvánvaló írásmód-variáns/szinonima összevonása, hogy ne szerepeljenek
 // külön chipként (pl. "AI" és "mesterséges intelligencia" ugyanaz a téma).
@@ -780,37 +753,31 @@ function canonTag(t) { return TAG_SYNONYMS[t] || t; }
 
 function renderTagCloud() {
   const filtered = getFiltered();
-  const counts = { prohuman: {}, piac: {}, versenytars: {} };
-  filtered.forEach(a => {
-    const bucket = counts[a.fokategoria];
-    if (bucket) a.kulcsszavak.forEach(t => {
-      const ct = canonTag(t);
-      bucket[ct] = (bucket[ct]||0) + 1;
-    });
-  });
-  Object.keys(TAG_GROUP_META).forEach(kat => {
-    const group  = document.getElementById(`tag-group-${kat}`);
-    const cloud  = document.getElementById(`tag-cloud-${kat}`);
-    const toggle = document.getElementById(`tag-cloud-toggle-${kat}`);
-    const tags = Object.entries(counts[kat]).sort((a,b)=>b[1]-a[1]);
-    if (!tags.length) { group.style.display = 'none'; return; }
-    group.style.display = '';
-    cloud.innerHTML = tags.map(([t,c]) =>
-      `<span class="tag-chip ${activeTags.has(t)?'active':''}" onclick="toggleTag('${esc(t)}')">${t} <span class="tag-cnt">(${c})</span></span>`
-    ).join('');
-    if (tags.length > TAG_CLOUD_COLLAPSE_THRESHOLD) {
-      toggle.style.display = 'inline-block';
-      cloud.classList.toggle('collapsed', !tagCloudExpanded[kat]);
-      toggle.textContent = tagCloudExpanded[kat] ? 'Szűrők bezárása' : `Összes szűrő megnyitása (${tags.length})`;
-    } else {
-      toggle.style.display = 'none';
-      cloud.classList.remove('collapsed');
-    }
-  });
+  const counts = {};
+  filtered.forEach(a => a.kulcsszavak.forEach(t => {
+    const ct = canonTag(t);
+    counts[ct] = (counts[ct]||0) + 1;
+  }));
+  const allTags = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  const tags = allTags.slice(0, TAG_CLOUD_MAX);
+  const cloud = document.getElementById('tag-cloud');
+  const toggle = document.getElementById('tag-cloud-toggle');
+  if (!tags.length) { cloud.innerHTML = ''; toggle.style.display = 'none'; return; }
+  cloud.innerHTML = tags.map(([t,c]) =>
+    `<span class="tag-chip ${activeTags.has(t)?'active':''}" onclick="toggleTag('${esc(t)}')">${t} <span class="tag-cnt">(${c})</span></span>`
+  ).join('');
+  if (tags.length > TAG_CLOUD_COLLAPSE_THRESHOLD) {
+    toggle.style.display = 'inline-block';
+    cloud.classList.toggle('collapsed', !tagCloudExpanded);
+    toggle.textContent = tagCloudExpanded ? 'Szűrők bezárása' : `Összes szűrő megnyitása (${tags.length})`;
+  } else {
+    toggle.style.display = 'none';
+    cloud.classList.remove('collapsed');
+  }
 }
 
-function toggleTagCloud(kat) {
-  tagCloudExpanded[kat] = !tagCloudExpanded[kat];
+function toggleTagCloud() {
+  tagCloudExpanded = !tagCloudExpanded;
   renderTagCloud();
 }
 
