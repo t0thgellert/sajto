@@ -376,6 +376,20 @@
       color: #fff;
     }
     .tag-chip .tag-cnt { opacity: .6; font-size: 10px; }
+    .tag-cloud.collapsed {
+      max-height: 104px;
+      overflow: hidden;
+    }
+    .tag-cloud-toggle {
+      display: none;
+      margin: 8px 0 14px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--blue-ph);
+      cursor: pointer;
+      text-decoration: underline;
+      user-select: none;
+    }
 
     /* ─── RESULTS BAR ─── */
     .results-bar {
@@ -616,6 +630,7 @@
 <!-- ═══ TAG CLOUD ═══ -->
 <div class="tag-section">
   <div class="tag-cloud" id="tag-cloud"></div>
+  <div class="tag-cloud-toggle" id="tag-cloud-toggle" onclick="toggleTagCloud()"></div>
 </div>
 
 <!-- ═══ RESULTS BAR ═══ -->
@@ -721,16 +736,33 @@ function clearFilters() {
 }
 
 // ─── TAG CLOUD ──────────────────────────────────────────────────────────────
+let tagCloudExpanded = false;
+const TAG_CLOUD_COLLAPSE_THRESHOLD = 12;
+
 function renderTagCloud() {
   const filtered = getFiltered();
   const counts = {};
   filtered.forEach(a => a.kulcsszavak.forEach(t => counts[t] = (counts[t]||0)+1));
   const tags = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
   const cloud = document.getElementById('tag-cloud');
-  if (!tags.length) { cloud.innerHTML = ''; return; }
+  const toggle = document.getElementById('tag-cloud-toggle');
+  if (!tags.length) { cloud.innerHTML = ''; toggle.style.display = 'none'; return; }
   cloud.innerHTML = tags.map(([t,c]) =>
     `<span class="tag-chip ${activeTags.has(t)?'active':''}" onclick="toggleTag('${esc(t)}')">${t} <span class="tag-cnt">(${c})</span></span>`
   ).join('');
+  if (tags.length > TAG_CLOUD_COLLAPSE_THRESHOLD) {
+    toggle.style.display = 'inline-block';
+    cloud.classList.toggle('collapsed', !tagCloudExpanded);
+    toggle.textContent = tagCloudExpanded ? 'Szűrők bezárása' : `Összes szűrő megnyitása (${tags.length})`;
+  } else {
+    toggle.style.display = 'none';
+    cloud.classList.remove('collapsed');
+  }
+}
+
+function toggleTagCloud() {
+  tagCloudExpanded = !tagCloudExpanded;
+  renderTagCloud();
 }
 
 function toggleTag(t) {
