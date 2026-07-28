@@ -25,6 +25,9 @@ Elvárt JSON az apply-hoz (CSAK az új cikkek):
 
 Validáció az apply-ban: érvénytelen datum vagy fokategoria esetén a cikk
 KIMARAD és FIGYELEM sor jelzi — ezek nélkül a dashboard JS-e összeomlana.
+A kulcsszavakat a cowork/vocab.py ZÁRT listájára képezi; ami nincs a listán
+(egyszeri cégnév, város, szóvivő neve), az eldobásra kerül FIGYELEM sorral —
+a cikk nem marad ki miatta. A vocab.py fejében írja, hogyan bővítsd.
 """
 
 import sys
@@ -36,6 +39,11 @@ import shutil
 import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
+
+# A zárt címkelista a runner mellett lakik (cowork/vocab.py). Nélküle nincs
+# feldolgozás: címke-validáció nélkül visszatérne az 588-címkés zaj.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from vocab import VOCAB, normalize_tags  # noqa: E402
 
 # ── Útvonalak (a script helyéből számolva — session-független) ────────────────
 
@@ -153,13 +161,32 @@ def _monday(date_str):
     return (d - datetime.timedelta(days=d.weekday())).isoformat()
 
 
-def _tags(v):
-    """kulcsszavak mindig string-lista legyen — a dashboard JS enélkül elszáll."""
+def _tags(v, warnings=None, cim=""):
+    """kulcsszavak -> a zárt vokabuláriumra (vocab.py) képezett string-lista.
+
+    Miért kötelező a szűkítés: amíg a címkék szabad szövegként jöttek, 435
+    cikkre 588 különböző címke keletkezett, ebből 389 pontosan EGY cikkhez —
+    ez nem szűrő, csak zaj. A listán kívüli címke ELDOBÁSRA kerül (a hosszú
+    farkat a szabadszavas kereső fedi), és FIGYELEM sorban megjelenik, hogy
+    lásd, ha egy visszatérő új szereplőt fel kell venni a vocab.py-ba.
+    """
     if isinstance(v, str):
         v = [t.strip() for t in v.split(",")]
     if not isinstance(v, list):
-        return []
-    return [str(t).strip() for t in v if str(t).strip()]
+        v = []
+    raw = [str(t).strip() for t in v if str(t).strip()]
+    kept = normalize_tags(raw)
+    if warnings is not None:
+        dropped = [t for t in raw if not normalize_tags([t])]
+        if dropped:
+            warnings.append(
+                f"FIGYELEM: vokabuláriumon kívüli címke eldobva "
+                f"({', '.join(dropped)}) — {cim[:50]}")
+        if not kept:
+            warnings.append(
+                f"FIGYELEM: a cikk egyetlen érvényes címke nélkül maradt "
+                f"— {cim[:50]}")
+    return kept
 
 # ── Git ───────────────────────────────────────────────────────────────────────
 
@@ -264,7 +291,7 @@ def _normalize(c, warnings):
     c["het"] = _monday(datum)          # kötelező — enélkül a hét-szűrő JS elszáll
 
     c["alkategoria"] = _clean(c.get("alkategoria")) or "Egyéb"
-    c["kulcsszavak"] = _tags(c.get("kulcsszavak"))
+    c["kulcsszavak"] = _tags(c.get("kulcsszavak"), warnings, c["cim"])
     return c
 
 
@@ -335,7 +362,10 @@ def _save_state(state):
 def cmd_scan():
     INCOMING.mkdir(parents=True, exist_ok=True)
     done = set(_load_state()["processed"])
-    files = [p for p in INCOMING.iterdir()
+    # rglob: az incoming/ alá junctionölt OneDrive-mappát is látja.
+    # A dedupe és az extract fájlNÉV szerint megy, nem útvonal szerint —
+    # ezért két azonos nevű fájl külön alkönyvtárban ÜTKÖZIK (lásd cmd_extract).
+    files = [p for p in INCOMING.rglob("*")
              if p.is_file() and not p.name.startswith("~")]
     todo = sorted(p.name for p in files
                   if p.suffix.lower() == ".docx" and p.name not in done)
@@ -351,6 +381,16 @@ def cmd_scan():
 
 def cmd_extract(docx_name):
     path = INCOMING / docx_name
+    if not path.exists():
+        # alkönyvtárban is (junctionölt OneDrive-mappa)
+        hits = [p for p in INCOMING.rglob(Path(docx_name).name) if p.is_file()]
+        if len(hits) > 1:
+            names = ", ".join(str(p.relative_to(INCOMING)) for p in hits)
+            raise RuntimeError(
+                f"Több '{docx_name}' nevű fájl van az incoming/ alatt ({names}) — "
+                "a dedupe fájlnév szerint megy, töröld a duplikátumot.")
+        if hits:
+            path = hits[0]
     if not path.exists():
         path = Path(docx_name)  # abszolút út is elfogadott
     if not path.exists():
