@@ -594,7 +594,7 @@
     </a>
     <div class="nav-search-wrap">
       <svg class="nav-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-      <input class="nav-search" type="text" id="nav-search" placeholder="Keresés cikkek között…" oninput="applyFilters()">
+      <input class="nav-search" type="text" id="nav-search" placeholder="Keresés cikkek között…" oninput="onSearchInput()">
     </div>
     <div class="nav-right"></div>
   </div>
@@ -703,6 +703,18 @@ function init() {
 }
 
 // ─── FILTERS ────────────────────────────────────────────────────────────────
+
+// A kereső az EGÉSZ archívumra kérdez, ezért ha a felhasználó beír valamit, a
+// hét-szűrő elengedi magát. Nélküle a keresés csendben 0 találatot adna: az
+// oldal alapból az aktuális hétre szűr, és ott a keresett cikk jó eséllyel
+// nincs benne. A legördülő látványosan visszaáll 'Összes hét'-re, hogy ne
+// rejtett viselkedés legyen.
+function onSearchInput() {
+  const sel = document.getElementById('week-select');
+  if (document.getElementById('nav-search').value.trim() && sel.value) sel.value = '';
+  applyFilters();
+}
+
 function getFiltered() {
   const week   = document.getElementById('week-select').value;
   const search = document.getElementById('nav-search').value.toLowerCase().trim();
