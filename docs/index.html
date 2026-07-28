@@ -64,10 +64,14 @@
       gap: 20px;
     }
     .nav-brand {
+      /* baseline, nem center: a logóban a figura feje a betűk FÖLÉ nyúlik, ezért
+         a 28px-es keret geometriai közepe 5,2px-szel a szóvédjegy optikai közepe
+         felett van. Középre igazítva a 'Sajtófigyelő' láthatóan magasabban ült.
+         A baseline-igazítás az <a>-ból szintetizált alapvonalat (a keret alját,
+         28px) használja, a szóvédjegy alapvonala pedig 27,8px — 0,2px eltérés. */
       display: flex;
-      align-items: center;
+      align-items: baseline;
       gap: 12px;
-      text-decoration: none;
       flex-shrink: 0;
     }
     .nav-brand-name {
@@ -757,7 +761,10 @@ function applyFilters() {
   renderTagCloud();
 
   const total = DB.cikkek.length;
-  const isFiltered = activeKat || activeTags.size || document.getElementById('week-select').value || document.getElementById('nav-search').value;
+  // A hét-szűrő szándékosan NINCS benne: a clearFilters() nem nullázza (a heti
+  // nézet a kezdőállapot), tehát ne is bukkanjon fel a gomb csak attól, hogy egy
+  // hét ki van választva — nem lenne mit tennie vele. Váltani a legördülőben kell.
+  const isFiltered = activeKat || activeTags.size || document.getElementById('nav-search').value;
   document.getElementById('results-text').textContent =
     articles.length === total
       ? `Összes ${total} cikk megjelenítve`
