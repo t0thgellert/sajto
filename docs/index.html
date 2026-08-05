@@ -114,7 +114,13 @@
       margin: 0 2px;
     }
     .nav-brand-sub {
-      font-size: 13px;
+      /* 23.4px, nem 13px: a logó szóvédjegyének (PROHUMAN GROUP) nagybetű-
+         magassága 105,62 user unit a 177 magas viewBox-ban, a logó 28px-en
+         renderel -> 105,62 * 28/177 = 16,71px verzálmagasság. Az Open Sans
+         capHeight/em aránya 1462/2048 = 0,7139, tehát 16,71/0,7139 = 23,4px.
+         Így a 'Sajtófigyelő' S-e pontosan olyan magas, mint a logó betűi.
+         A .nav-brand baseline-igazítása miatt az alapvonal is egyben marad. */
+      font-size: 23.4px;
       color: var(--blue-ph);
       font-weight: 600;
     }
@@ -593,6 +599,10 @@
 
     /* ─── RESPONSIVE ─── */
     @media (max-width: 768px) {
+      /* Kis kijelzőn a logó (261px) + a 23,4px-es felirat nem fér ki: 390px-en
+         a fejléc 428px lenne, és az oldal vízszintesen elcsúszna. Mobilon
+         ezért marad a korábbi 13px. */
+      .nav-brand-sub { font-size: 13px; }
       .nav-search-wrap { display: none; }
       .hero-heading { font-size: 26px; }
       .card-grid { grid-template-columns: 1fr; }
