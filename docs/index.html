@@ -617,6 +617,8 @@
     .ws-title { flex: 1; font-size: 16px; font-weight: 700; line-height: 1.4; color: #111; margin: 0; }
     .ws-title a { color: inherit; text-decoration: none; }
     .ws-title a:hover { color: var(--blue-ph); }
+    .ws-title a:focus { outline: none; }
+    .ws-title a:focus-visible { outline: 2px solid var(--blue-ls); outline-offset: 2px; border-radius: 4px; }
     .ws-close {
       flex-shrink: 0; width: 32px; height: 32px; border: none; border-radius: 50%;
       background: #f0f3f8; color: #556; font-size: 18px; line-height: 1; cursor: pointer;
@@ -751,7 +753,7 @@
   <div class="ws-inner">
     <div class="ws-head">
       <h2 class="ws-title" id="ws-title"></h2>
-      <button type="button" class="ws-close" id="ws-close" aria-label="Bezárás">×</button>
+      <button type="button" class="ws-close" id="ws-close" aria-label="Bezárás" autofocus>×</button>
     </div>
     <div class="ws-meta" id="ws-meta"></div>
     <div class="ws-label" id="ws-label"></div>
