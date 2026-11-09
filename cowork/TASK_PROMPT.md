@@ -5,118 +5,106 @@ A projektmappa Windows-útvonala: `C:\Users\toth.gellert\Claude\Projects\Sajtóf
 A bash sandboxban: `/sessions/<session>/mnt/Sajtófigyelés/` (a pontos mount-útvonal a session-leírásban).
 Lent `<mappa>` = a sandbox-útvonal. A runnert MINDIG teljes útvonallal hívd.
 
-**Verzió: 2026-07-28c.** A `b`-ben került be a OneDrive-észlelés (Power Automate
-flow) és a magyar stílusszabály-blokk. A `c`-ben a zárt **Címketár** — a
-`kulcsszavak` mező innentől nem szabad szöveg, és a runner validálja.
+**Verzió: 2026-10-14g.** A `b`-ben jött a magyar stílusszabály-blokk, a `c`-ben a
+zárt **Címketár** (a `kulcsszavak` mező nem szabad szöveg, a runner validálja).
+A `d`-ben egyszerűsítés: a bemeneti mappa szabadon megválasztható (`scan
+[mappa]`), és kikerült a OneDrive-connector-alapú észlelés — mérve nem működött.
+Az `e`-ben a **link-pótlás** (4. lépés, `relink-list` / `relink-apply`), az
+`url_forras` mező és a `fix-sources` alparancs.
+
+Az **`f`-ben három javítás** (2026-08-05-i pipeline-audit):
+
+1. Az `apply` **nem nyeli el többé a hibás körképet.** Ha bármelyik cikk kiesik
+   a validáción, a jó cikkek bekerülnek és ki lesznek pusholva, de a docx NEM
+   lesz feldolgozottként megjelölve, és a runner hibakóddal áll le. Korábban
+   ilyenkor is bekerült a `processed.json`-ba, tehát a körkép véglegesen
+   elveszett. **Ilyenkor a te dolgod: javítsd a jelzett cikkeket a JSON-ban, és
+   futtasd újra ugyanazt az `apply`-t.** Ez biztonságos, a merge dedupál.
+2. Új alparancs: **`audit-links`** — a MÁR bent lévő linkek auditja
+   (forrásnév kontra URL-domain). **NEM a heti futás része**, ne hívd meg
+   magadtól: eseti karbantartó kör, Gellért indítja.
+3. Az `apply` figyelmeztet, ha a `forras` ellentmond az URL domainjének.
+
+A **`g`-ben (2026-10-14)** a link nélküli cikkek felmérése után:
+
+1. Az `extract` a **Word-mezőkódos linkeket** (`HYPERLINK "…"`) is kiolvassa,
+   és a WS-sablon „Cím (Médium, …)" mintasorát kihagyja. Mérve: a 07-31-i
+   körképben a WS mind a 14 tételt belinkelte, a régi kinyerés 2-t elvesztett.
+   A link nélkül érkező cikkek fő oka ez volt, nem a WS.
+2. Az `apply` a cikkekhez eltárolja a **WS saját kivonatát** (`kivonat`
+   mező) a `work/sajto_input_*.txt`-ből. Neked ehhez nincs teendőd; a kiírt
+   `WS-kivonat: N / M` sort add tovább, ha N < M.
+3. **Link-pótlás:** a sikertelen keresést naplózni kell (`nincs_talalat`), a
+   `relink-list` külön `kezi_lista`-t ad (ezeket NE keresd), a TV-tételeket
+   egy egzakt címkeresés után NEM szabad lezárni, `nincs` lezárás csak
+   `indok`-kal. Részletek: 4/B–4/G.
+**Fontos (2026-10-14, Gellért kérése):** a publikus oldalon nem szerepelhet
+utalás a körkép forrására. A felületen a kivonat neve egyszerűen „Összefoglaló",
+a mezőnév `kivonat`. Commit-üzenetbe és a DB-be se írj ilyen utalást vagy belső
+jegyzetet — az `indok` csak a `work/*.json`-ban él.
+4. Új alparancsok: `kezi-javitas`, `ws-backfill`. **Egyik sem a heti futás
+   része**, ne hívd meg magadtól — Gellért kéri.
+5. Új lépés a feldolgozás végén: **`docx-relink "<b>"`** (Feldolgozás 5.). A
+   bemeneti mappa összes körképéből — a régiekből is — pótolja a link nélküli
+   cikkek linkjét, ha a WS megadta. Keresés nélkül, idempotensen.
 
 ---
 
-## ⚠ A LEGFONTOSABB MEGKÖTÉS — olvasd el, mielőtt bármit teszel
+## ⚠ A LEGFONTOSABB MEGKÖTÉS
 
-A dokumentumokban a cikkek linkjei **Word-hyperlinkek**, nem kiírt URL-ek. A
-`[URL: ...]` jelölést, amire a feldolgozási szabály hivatkozik, **a runner.py
-maga gyártja** a docx hyperlink-relationshipjeiből (`runner.py` `extract_docx`,
-88–98. sor). Ez kizárólag a lokális, python-docx alapú `extract` során jön létre.
+A cikkek linkjei **Word-hyperlinkek**, nem kiírt URL-ek. A `[URL: ...]` jelölést
+**a runner.py maga gyártja** a docx hyperlink-relationshipjeiből és (2026-10-14
+óta) a Word-mezőkódos `HYPERLINK`-ekből (`extract_docx`). Ez kizárólag a lokális, python-docx alapú `extract` során jön
+létre — tehát a fájl **bináris tartalmának** elérhetőnek kell lennie egy csatolt
+mappában.
 
-Ebből következik: **a Microsoft 365 connector (`read_resource`) által
-visszaadott szöveg NEM használható cikk-feldolgozásra.** A connector csak a
-látható szöveget adja vissza, hyperlink-célok nélkül — abból minden cikk
-`url: null` lenne, a `state/processed.json` pedig véglegesen lezárná a fájlt,
-tehát a linkek soha nem kerülnének be. Összehasonlításul: a 2026-07-24-i futás
-17 cikkéből 14-nek volt URL-je.
-
-**TILOS tehát:** `runner.py apply`-t hívni olyan JSON-ra, amit a connectorból
-kapott szövegből állítottál elő. A `read_resource` a OneDrive-mappára
-kizárólag **észlelésre** használható (mi vár feldolgozásra), nem tartalom-
-kinyerésre.
+Mért tény (2026-08-04): a Microsoft 365 connector (`read_resource`) szövegéből a
+14 URL-ből **0** marad meg, és a szöveg is szétszabdalva jön
+(`V ersenytársakra`, `2026. 04 . 01 .`). Ezért **TILOS** `apply`-t hívni olyan
+JSON-ra, ami connector-szövegből készült.
 
 ---
 
 ## Lépések
 
 1. `pip install python-docx --break-system-packages` (ha még nincs telepítve).
-2. **Észlelés** — mi vár feldolgozásra (2/A: OneDrive, 2/B: lokális).
-3. **Feldolgozás** — kizárólag lokálisan meglévő fájlokra (3.).
-4. **Zárás** és ellenőrzés.
+2. **Bemeneti mappa** meghatározása.
+3. **Feldolgozás** fájlonként.
+4. **Link-pótlás** — a hiányzó cikk-linkek megkeresése (lásd lent).
+5. **Zárás** és ellenőrzés.
 
 ---
 
-## 2/A — OneDrive-észlelés
+## Bemeneti mappa
 
-A Power Automate flow (`87b404ad-b66e-4df6-8df0-1f5dcc208778`, státusz On) minden
-`wshungary.hu` feladótól érkező, mellékletes emailt lement Gellért OneDrive for
-Business-ébe a `Sajtofigyelo_Incoming` mappába. Ezt a mappát a Microsoft 365
-connectorral olvasod — **de csak azért, hogy megtudd, MELYIK fájl érkezett.**
+A `.docx` körképek **egy lemezen létező, csatolt mappában** vannak. Két eset:
 
-**driveId (Gellért „Dokumentumok" OneDrive-ja):**
-`b!LVNR9gwBukiluIqC2nb9BVwsKM1JEWZAtuAT7MFQR8rEDdopWv8oRq25yJjc4raz`
+- a projektmappa `incoming/` almappája, vagy
+- egy külön csatolt mappa (pl. egy lokálisan szinkronizált OneDrive-mappa).
 
-Ha ez hibát ad, kérd le újra: `read_resource` → `drive:///users/me`, és a
-**„Dokumentumok"** nevű drive URI-jából vedd a driveId-t. A
-„PersonalCacheLibrary" NEM az — a két driveId az első 44 karakteren azonos,
-tehát figyelmesen hasonlítsd össze.
+Listázd a `/sessions/<session>/mnt/` tartalmát. Ha a `Sajtófigyelés` mellett van
+másik csatolt mappa, és abban `HR piaci körkép ....docx` nevű fájlok vannak, az
+a bemenet. Legyen `<b>` = ez a mappa; ha nincs ilyen, `<b>` = `<mappa>/incoming`.
 
-Lépések:
+A `scan` opcionálisan mappát fogad, tehát a bemenet bárhol lehet:
+`runner.py scan "<b>"`. A dedupe fájlNÉV szerint megy a
+`state/processed.json` ellen, függetlenül attól, melyik mappából jött a fájl —
+tehát mappát váltani biztonságos, semmi nem lesz kétszer feldolgozva.
 
-1. `read_resource` → `file:///{driveId}/` — a OneDrive gyökere.
-   Keresd a `Sajtofigyelo_Incoming` nevű **folder** bejegyzést.
-   - **Figyelem:** a gyökérlistában az elemek elválasztó nélkül futhatnak
-     egymásba (`...SQ4AE3AX57Attachments (folder, ...)`). Az itemId a
-     `file:///{driveId}/` utáni rész **a következő elem neve előtt** — a
-     megnevezés (`Sajtofigyelo_Incoming (folder, ...)`) és az URI párosítására
-     figyelj, ne vakon az utolsó szegmenst vedd.
-   - **Ha nincs ilyen mappa:** a flow még soha nem futott le élesben
-     (2026-07-28-i állapot: valóban nem létezett). Jegyezd fel a záró
-     összefoglalóba, és menj a 2/B-re.
-
-2. `read_resource` → `file:///{driveId}/{mappa_itemId}` — a mappa tartalma
-   (soronkénti lista). Csak a `.docx` fájlok érdekelnek; a `.doc`/`.xlsx`
-   fájlokat nevezd meg `FIGYELEM:` sorként.
-
-3. **Dedupe.** Olvasd be a `<mappa>/state/processed.json` `"processed"` listáját.
-   Csak azok a fájlok újak, amelyek **neve** (kiterjesztéssel) nincs a listában.
-   A `processed.json`-t kézzel SOHA ne írd — azt a runner `apply` írja.
-
-4. Minden így talált új fájlnévre nézd meg, megvan-e **lokálisan** is:
-   `ls -la "<mappa>/incoming/"`
-   - **Ha lokálisan is megvan:** semmi külön dolgod, a 2/B `scan` fel fogja
-     venni. Menj a 2/B-re.
-   - **Ha lokálisan NINCS meg:** ezt a fájlt **nem tudod feldolgozni** (lásd a
-     fenti megkötést: a connector szövegéből elvesznének a linkek). Írd fel a
-     záró összefoglalóba pontos fájlnévvel:
-     „`<fájlnév>` a OneDrive `Sajtofigyelo_Incoming` mappájában vár, de
-     lokálisan nincs meg. A linkek csak a lokális python-docx feldolgozásból
-     jönnek ki, ezért kézi mentés (vagy a `mklink /J` junction beállítása) kell
-     az `incoming/` mappába."
-   - **NE hívj `apply`-t erre a fájlra.** Inkább maradjon feldolgozatlan, mint
-     hogy linkek nélkül, véglegesen bekerüljön.
-
-5. Az `extract` alparancsot a OneDrive-os itemId-kre soha ne próbáld meghívni —
-   az a lokális `incoming/`-ra (vagy abszolút lokális útvonalra) van kötve.
+**Amit NE tegyél:** ne próbáld a Microsoft 365 connectorral (`read_resource`)
+kinyerni a dokumentum szövegét. Mérve: a 14 URL-ből 0 marad meg, és a szöveg is
+szétszabdalva jön (`V ersenytársakra`, `2026. 04 . 01 .`). A `processed.json`
+pedig véglegesen lezárná a fájlt. Csak a lokális `extract` használható.
 
 ---
 
-## 2/B — Lokális `incoming/` (a tényleges feldolgozási út)
+## Feldolgozás
 
-1. `python3 -B <mappa>/cowork/runner.py scan`
+1. `python3 -B <mappa>/cowork/runner.py scan "<b>"`
 
-2. Ha `NINCS_UJ`:
-   - Ha a 2/A talált OneDrive-on várakozó, lokálisan nem meglévő fájlt, akkor
-     már tudod a választ: azt jelentsd (4/a lépés a 2/A-ban). Fejezd be.
-   - Egyébként ellenőrizd az M365 connectorral (`outlook_email_search`),
-     érkezett-e az elmúlt 7 napban **„piaci körkép"** tárgyszavú email
-     (mindhárom írásmód előfordult: „piaci körkép", „HR Piaci Körkép",
-     „HR-piaci körkép" — a substring-keresés mindet elkapja). **Feladó
-     email-címre NE szűrj** — a WS Hungary-s küldő személye változik (volt Laky
-     Zoltán és Szökendi Zsuzsanna is), és Major Gábor forwardja is bejön.
-   - **HAMIS RIASZTÁS ELKERÜLÉSE (fontos):** a 7 napos ablakban benne lehet egy
-     már FELDOLGOZOTT email is (jellemzően a hétfői futásnál az előző pénteki).
-     Mielőtt hiányzó mellékletet jelentesz, hasonlítsd össze az email
-     mellékletnevét a `processed.json` listájával. Ha a fájl már fel van
-     dolgozva, azt írd: „nincs teendő, az utolsó körkép (`<fájlnév>`) már
-     feldolgozva". Csak akkor jelezz hiányt, ha a melléklet neve NINCS a
-     `processed.json`-ban és lokálisan sem létezik.
-   - Fejezd be a futást.
+2. Ha `NINCS_UJ`: nincs teendő, egysoros jelentéssel fejezd be. (A körkép
+   jellemzően péntek délután–kora este érkezik; ha még nincs itt, valószínűleg
+   csak késik, és a következő futás elkapja.)
 
 3. A `FIGYELEM: ... .doc formátum` sorokat add tovább.
 
@@ -148,6 +136,18 @@ Lépések:
       Az `apply` kiírja a kihagyott cikkeket (`FIGYELEM:` sorok) — add tovább.
       Ha JSON-hibát jelez többszöri próbálkozás után is, írd ki a JSON-t bash
       heredoc-kal (`cat > ... <<'EOF'`) és futtasd újra az `apply`-t.
+
+5. Az összes új fájl után, **egyszer**:
+
+   `python3 -B <mappa>/cowork/runner.py docx-relink "<b>"`
+
+   (`<b>` = ugyanaz a bemeneti mappa, mint a `scan`-nél.) A mappa összes
+   körképéből pótolja a link nélküli cikkek linkjét, ha a WS megadta — a régi
+   körképekből is, mert 2026-10-14 előtt a mezőkódos linkek elvesztek. A docx
+   linkje hiteles; a runner csak a bizonyíthatóan rosszat dobja el
+   (`DOCX-LINK ELUTASÍTVA`), és az ütközést jelzi (`ÜTKÖZÉS`). Idempotens: ha
+   nincs mit pótolni, nincs commit. Ezután jön a 4. lépés (link-pótlás
+   kereséssel) — az már csak azt keresi, ami a docx-ben sem volt.
 
 ---
 
@@ -189,6 +189,9 @@ Szabályok:
 7. Ha van tartalomjegyzék-blokk („Tartalom" rész pontozott soraival), hagyd ki
    (az újabb dokumentumokban jellemzően nincs)
 8. Ne találj ki adatot: ami nincs a szövegben, az `null` vagy üres
+9. A WS-sablon mintasora („Cím (Médium, …)") nem cikk. Az `extract` 2026-10-14
+   óta kihagyja; ha mégis látod, hagyd ki. Ha egy valódi cikknél maradt a
+   „Médium" forrásnév, a runner az URL domainjéből pótolja.
 
 ---
 
@@ -311,14 +314,204 @@ Gyakran üres fordulatok — töröld, ha csak késleltetik a lényeget:
 
 ---
 
+## 4. Link-pótlás (`relink-list` / `relink-apply`)
+
+A docx-ekben a linkek Word-hyperlinkek, és néha hiányoznak. Kezdőállapot
+2026-08-05: 449 cikkből 62 URL nélküli (13,8%). Az első nagy kör után **10**
+maradt. 2026-10-14: 611-ből 22. A 07-24 óta link nélkül érkezett 40 cikkből
+30-at a link-pótlás később megtalált — a linkek többsége valójában benne volt a
+docx-ben mezőkódként (az `extract` ezt azóta olvassa). Az `apply` csak hozzáfűz, meglévő cikket nem módosít — ezért külön út.
+
+**Miért itt fut, és nem külön időzített taskban:** a cikkek idővel *nehezebben*
+találhatók meg (lekerülnek a főlapról, fizetőfal, archívum), tehát a legjobb
+pillanat a keresésre közvetlenül a friss feldolgozás után.
+
+### 4/A — Friss kör (minden futásban, az `apply` UTÁN)
+
+```
+python3 -B <mappa>/cowork/runner.py relink-list --het=<a most feldolgozott hét hétfője>
+```
+
+### 4/B — Backlog-kör (csak hétfőn, a friss kör után)
+
+```
+python3 -B <mappa>/cowork/runner.py relink-list --limit=10
+```
+
+A `--limit=10`-et ne emeld meg. A `relink-list` a **legkevesebbszer keresetteket**,
+azon belül a legfrissebbeket adja előre (így a hétfői kör végigforog a listán), és
+`stderr`-en kiírja, mennyi maradt — ezt a számot **mindig vedd bele a záró
+összefoglalóba**, hogy látszódjon a fogyás.
+
+A kimenetnek két listája van:
+
+- `cikkek` — ezeket keresd meg (4/C).
+- `kezi_lista` — ezeket **NE keresd**. Vagy a domainjüket nem éri el a kereső
+  (`NEM_KERESHETO`: nlc.hu, 24.hu, rtl.hu — mérve 2026-10-14), vagy háromszor
+  sem volt találat. Ezeket a zárásban sorold fel (id, cím, forrás, dátum, ok):
+  Gellért kézzel pár perc alatt megtalálja őket (2026-10-14-én két ilyet
+  talált meg perceken belül).
+
+### 4/C — Keresés cikkenként
+
+A `relink-list` minden cikkhez ad `domain_tipp`-et.
+
+1. **Egzakt cím, a médium domainjére szűkítve.** `WebSearch`, `allowed_domains:
+   ["<domain_tipp>"]`, a query a cikk címe **idézőjelben**.
+2. **Ha nincs egzakt találat:** MÉG EGY próba a cím legjellegzetesebb 6-10 szavas
+   részletével (a kettőspont előtti figyelemfelhívó részt hagyd el).
+3. **Ha ezután sincs:** ne keress harmadszor, de **add be**
+   `{"id":"ART-…","nincs_talalat":true}` formában. Ez naplózza a sikertelen
+   keresést (`url_keresve`); 2026-10-14 előtt ez nyomtalan volt, ezért nem
+   látszott, keresett-e egyáltalán a kör. Három sikertelen kör után a tétel a
+   `kezi_lista`-ra kerül.
+4. **Ha a domain-szűrt keresés hibát ad** (pl. HTTP 400), az NEM „nincs
+   találat": ne naplózd, hanem írd a zárásba a domaint — a runner
+   `NEM_KERESHETO` halmazába kell felvenni.
+
+**A LEGFONTOSABB SZABÁLY:** a találati lista első helye NEM bizonyíték. A
+keresők a magyar egzakt kifejezést gyakran figyelmen kívül hagyják, és
+*tematikusan* hasonló, de teljesen más cikket adnak vissza az 1. helyen. Két
+mért példa (2026-08-05):
+
+- G7, „A vendégmunkásvita a magyar ipar egyik érzékeny pontját találta el"
+  (2026-07-14) → az 1. találat egy **2025. januári** vendégmunkás-cikk volt.
+- GyártásTrend, „70 új csomagológyári munkahely Makón" → az 1. találat a
+  „Kapacitásbővítés 70,8 milliárd forintból **Dunaföldváron**" (a 70 ott a
+  milliárd forint összegre utal, nem munkahelyszámra).
+
+Csak akkor add be egy linket, ha a **találat címe** a cikk címe. Nem „hasonló",
+nem „ugyanarról szól" — ugyanaz a cím.
+
+**Médiumspecifikus tudás (mérve):**
+
+- **G7** = ma a Telex aloldala: `telex.hu/g7/<kat>/2026/07/14/<slug>`. Régi
+  cikkek g7.hu-n. A guard mindkettőt fogadja (`MEDIA_ALIASES`), és a `forras`
+  marad „G7" — NE írd át Telexre.
+- **rtl.hu, nlc.hu, 24.hu:** a domain-szűkített `WebSearch` HTTP 400-at ad
+  (proxy), az rtl.hu lekérése 403, az nlc.hu lekérése tiltott. Ezeket a runner
+  a `kezi_lista`-ra teszi — ne keresd és ne zárd le őket.
+- **HRPOWER** = `hrpwr.hu` (a WS „HRPOWER"-ként írja). A `domain_tipp`
+  2026-10-14 előtt üres volt erre a forrásra, tehát a keresés nem volt a
+  domainre szűkítve.
+- **Világgazdaság:** ugyanannak a cikknek háromféle címe lehet (headline, az
+  oldal `<title>`-je, és a WS-ben szereplő cím). Itt a 6–10 szavas
+  részlet-keresés a fontos, és az `oldal_cim` kötelező (a URL-ben csak év/hónap
+  van).
+- **autopro.hu** 520-at ad, **ado.hu** robots.txt-tiltást: ezeknél `oldal_cim`
+  nem beszerezhető, a slug-egyezés viszont működik (lásd 4/E).
+- **Nyomtatott megjelenés** (Budapest Business Journal, Dél-Dunántúli Gazdaság,
+  Műszaki Magazin): a docx `[URL:]`-je itt `e.pcloud.link` PDF-szkennelés, nem
+  cikk-link. Ezeknél nincs mit keresni.
+
+### 4/D — TV / rádió (`broadcast: true`)
+
+ATV, Híradó.hu, Trend FM, Kontroll: gyakran nincs online cikk, de **nem
+automatikusan** — egy Kontroll-tételnél youtube.com a link.
+
+**NE zárd le őket egy egzakt címkeresés után.** TV-tételnél a WS címe gyakran
+csak címke („Interjú Nógrádi Józseffel…"), az online változat más címmel jelenik
+meg, tehát az egzakt címkeresés eleve nem találhatja meg. 2026-08-05-én így
+zárult le tévesen ART-0172: az atv.hu-n 04-25-én fent volt az ATV Start-interjú
+„Ez lehet a Tisza-kormány első nagy dobása…" címmel.
+
+Helyette: keress a **szereplő nevére + a téma 2–3 kulcsszavára** a médium
+domainjén, a dátum ±2 napján belül. A találatot kérd le, és csak akkor add be,
+ha a szereplő és a téma egyezik — `oldal_cim`-mel és `indok`-kal (pl. „Nógrádi
+József az ATV Startban a minimálbér-szja-ról"). Ha nincs: `nincs_talalat`.
+
+`"url_forras":"nincs"` lezárást **csak Gellért kérésére** adj be, `indok`
+mezővel — a runner indok nélkül elutasítja.
+
+### 4/E — A JSON és a visszaírás
+
+```json
+{"linkek":[
+  {"id":"ART-0433","url":"https://www.portfolio.hu/gazdasag/20260722/..."},
+  {"id":"ART-0339","url":"https://profitline.hu/van-elet-a-vendegmunka-utan-487869",
+   "oldal_cim":"Van élet a vendégmunka után? - ProfitLine.hu"},
+  {"id":"ART-0596","nincs_talalat":true},
+  {"id":"ART-0269","url_forras":"nincs","indok":"Gellért: nyomtatott HVG, nincs online változat"},
+  {"id":"ART-0124","duplikatuma":"ART-0001"}
+]}
+```
+
+Írd a `<mappa>/work/sajto_relink_<dátum>.json` fájlba, majd:
+
+```
+python3 -B <mappa>/cowork/runner.py relink-apply "<mappa>/work/sajto_relink_<dátum>.json"
+```
+
+A runner **három bizonyítékfajtát** fogad el, legalább egy kell:
+
+1. **napra pontos URL-dátum** a cikk dátumától ±3 napon belül
+   (portfolio.hu `/20260722/`, telex.hu `/2026/05/15/`, hrportal.hu
+   `-20260727.html`) — offline ellenőrizhető,
+2. **slug-egyezés**: a URL utolsó beszédes szegmense a cím slugosított alakja
+   (`profitline.hu/van-elet-a-vendegmunka-utan-487869`) — szintén offline, és
+   olyan médiumoknál az egyetlen elérhető, amelyek nem engedik a lekérést,
+3. **`oldal_cim`**: a WebFetch-csel lekért oldal valódi `<title>`-je.
+
+Ha csak év-hónap van a URL-ben (vg.hu `/2026/05/`), az önmagában NEM elég —
+kérd le az oldalt, és add meg az `oldal_cim`-et. Ha a URL dátuma vagy éve-hónapja
+ELLENTMOND a cikk dátumának, a runner akkor is elutasít, ha a cím egyezik.
+
+Az `oldal_cim`-be **soha ne másold vissza a cikk címét** — az a bizonyíték, nem
+formalitás. Ha nem kérted le az oldalt, hagyd ki a mezőt.
+
+### 4/F — Duplikátum
+
+Ha két cikk ugyanaz (azonos dátum és forrás, az egyik címe csonka — a `_keys()`
+dedupe ezt elszalasztja), add be `{"id":"<csonka>","duplikatuma":"<a jó>"}`
+formában. A runner ellenőrzi a dátumot, a forrást és a cím-hasonlóságot, és csak
+akkor törli, ha a párnak van URL-je.
+
+### 4/G — Amit a runner elutasít (ez nem hiba, ez a védelem)
+
+Az `ELUTASÍTVA` sorokat **szó szerint add tovább** a záró összefoglalóban. A
+`FIGYELEM: <domain> nincs a DOMAIN_MAP-ban` sort is: azt a runner.py
+`DOMAIN_MAP`-jába fel kell venni.
+
+- `ÜTKÖZÉS`: a talált URL már egy másik cikknél van. Ez szinte mindig azt
+  jelenti, hogy a WS rossz tételhez tette a linket (2026-08-14: ART-0474 kapta a
+  0479 cikkének URL-jét). Ne próbáld újra, nem számít próbálkozásnak — add
+  tovább szó szerint, Gellért dönt (`kezi-javitas`).
+- `KIHAGYVA`: a cikknek közben lett linkje — nem hiba, nem számít
+  próbálkozásnak.
+
+### 4/H — Forrásnevek
+
+A `relink-apply --fix-sources` (vagy külön `fix-sources`) egységesíti az
+írásmódokat a `CANON_SOURCE` szerint (HR Portál / Hrportál / HR Portal → „HR
+Portál"; Economx / economx.hu → „Economx"; G7 / Telex, G7–Telex → „G7"). Ha egy
+csoportot nem ismer, a leggyakoribb írásmód nyer és `FIGYELEM` sorban jelzi —
+akkor vedd fel a `CANON_SOURCE`-ba.
+
+---
+
 ## Zárás
 
 A végén foglald össze:
 - hány fájlt dolgoztál fel, hány új cikk, push megtörtént-e (`PUSH OK`),
-- **a OneDrive-észlelés eredménye:** létezik-e a `Sajtofigyelo_Incoming` mappa
-  (ha igen: **a Power Automate flow működik** — ez az első éles visszajelzés
-  róla), és van-e ott olyan fájl, ami lokálisan még nincs meg,
-- kihagyott cikkek, `FIGYELEM:` sorok, hibák.
+- **link-pótlás:** hány link került be, hány cikk lett lezárva (`nincs`), hány
+  lett elutasítva és miért, hány sikertelen keresést naplóztál, és mennyi
+  maradt a backlogban (a `relink-list` `stderr`-sora),
+- **kézi pótlásra vár:** a `relink-list` `kezi_lista`-jának tételei
+  soronként: id, cím, forrás, dátum, ok. Mindig sorold fel, akkor is, ha
+  nem változott — ez Gellért teendőlistája,
+- **WS-kivonat:** ha az `apply` `WS-kivonat: N / M` sorában N < M, add tovább,
+- **docx-relink:** hány link jött a körképekből, és minden `DOCX-LINK
+  ELUTASÍTVA` / `ÜTKÖZÉS` sor szó szerint,
+- van-e olyan körkép, ami a OneDrive `Sajtofigyelo_Incoming` mappájában ott van,
+  de a csatolt bemeneti mappában nincs meg (2026-08-05-i mérés: a flow működik,
+  a mappában 18 fájl van 04-02-től 07-31-ig — tehát ha itt eltérés van, az a
+  bejuttatás hibája, nem a flow-é),
+- **link-audit:** minden `FIGYELEM: forras átírva ...` sor (ott a docx rossz
+  médiumnevet adott, a runner az URL domainje alapján javította), és minden
+  `FIGYELEM: gyanús link ...` sor **szó szerint** — ezek kézi ellenőrzést
+  kérnek, a runner szándékosan nem nyúl hozzájuk,
+- kihagyott cikkek, `FIGYELEM:` sorok, hibák. Ha `HIBA: N cikk kiesett a
+  validáción` volt, azt a legelső sorban mondd ki, a fájlnévvel együtt.
 
 Ellenőrzésképp kérd le a push után 2-3 perccel **mindkét** URL-t:
 - `https://t0thgellert.github.io/sajto/`
@@ -335,34 +528,49 @@ régi, jelezd, de ne kezeld hibaként.)
   futtass gitet, és fix /tmp-útvonalakat (pl. `/tmp/sajto_work`) SOHA ne
   használj: a /tmp más sessionök 'nobody' tulajdonú fájljait tartalmazhatja.
 - Mindig `python3 -B`-vel és teljes útvonallal futtasd a runnert. Létező
-  alparancsok: `scan`, `extract`, `apply` — más nincs.
+  alparancsok: `scan`, `extract`, `apply`, `relink-list`, `relink-apply`,
+  `fix-sources`, `audit-links`, `sync-cowork`, `docx-relink`, `kezi-javitas`,
+  `ws-backfill` (az utolsó kettő nem a heti futás része). Más nincs — ha valami hiányzik, a runner
+  kiírja a saját docstringjét és 1-es kóddal kilép, tehát a `python3 -B
+  <mappa>/cowork/runner.py` (argumentum nélkül) mindig megmutatja az
+  érvényes listát. NE ebben a fájlban keresd az igazságot: a runner
+  docstringje az.
 - A PAT a projektmappa `github_pat.txt` fájljában van; ha hiányzik, állj le és
   jelezd. (Publikus repónál a klón rossz PAT-tal is sikerül — a PAT-hiba csak
   push-nál derül ki.)
-- Ha az `apply` „Nincs új cikk" eredménnyel zárul, az nem hiba (duplikált küldés).
+- Az `apply` háromféleképpen zárulhat, és **ezek NEM ugyanazok**:
+  1. `KESZ` + `PUSH OK` → rendben, új cikkek bekerültek.
+  2. `KESZ`, de „Nincs új cikk" és a `[... validáción kiesett 0]` → duplikált
+     küldés, **nem hiba**, a fájl feldolgozottnak számít.
+  3. `HIBA: N cikk kiesett a validáción` → **ez hiba.** A fájl szándékosan NEM
+     lett feldolgozottként megjelölve. Olvasd el a `FIGYELEM:` sorokat, javítsd
+     a JSON-ban a jelzett cikkeket (jellemzően `datum` formátum vagy
+     `fokategoria`), és futtasd újra ugyanezt az `apply`-t. A már bekerült
+     cikkek nem duplikálódnak. Ha kétszer sem megy át, a záró összefoglalóban
+     nevezd meg a fájlt és a hibás cikkeket — így nem veszik el csendben.
 - A `state/processed.json` mondja meg, mi volt már feldolgozva. Ez a fájlszintű
   dedupe. Cikkszinten a runner `merge` függvénye kisbetűsített `cim`+`datum`
   vagy URL egyezésre dedupál — ez másodlagos védelem, ne támaszkodj rá.
 - Ha a `work/` vagy a `state/` mappa nem létezik, a runner létrehozza az
   `extract`/`apply` során. Ha te írsz oda kézzel, előbb `mkdir -p`.
 
-## Nyitott ügy — a teljes automatizálás hiányzó fele
+## A bejuttatás — hogyan kerül a docx egy csatolt mappába
 
-A Power Automate flow lementi a mellékletet a OneDrive-ra, de a fájl **bináris
-tartalma** onnan nem hozható be a feldolgozásba: a connector csak szöveget ad
-(linkek nélkül), a bash sandbox pedig csak a csatolt mappákat látja.
+A feldolgozásnak egyetlen előfeltétele van: a `.docx` legyen ott egy csatolt
+mappában. Erre két út működik, és a pipeline szempontjából felváltva
+egyenértékűek — a `scan` mindkettőt ugyanúgy kezeli.
 
-A hiányzó láncszem egy egyszeri Windows-junction, amit Gellértnek kell
-lefuttatnia rendszergazdai `cmd`-ben, miután a `Sajtofigyelo_Incoming` mappa
-létrejött és lokálisan szinkronizálódott:
+1. **Szinkronizált OneDrive-mappa csatolva.** A Power Automate flow
+   (`87b404ad-b66e-4df6-8df0-1f5dcc208778`, On, 2026-08-04-én ellenőrizve: 5
+   `Succeeded` futás) a `wshungary.hu`-s mellékleteket a OneDrive
+   `Sajtofigyelo_Incoming` mappájába menti. Ha ez a mappa lokálisan
+   szinkronizálva van (és „Megtartás mindig ezen az eszközön"), akkor
+   csatolható, és a `scan "<b>"` közvetlenül onnan olvas.
 
-```
-mklink /J "C:\Users\toth.gellert\Claude\Projects\Sajtófigyelés\incoming\_onedrive" "C:\Users\toth.gellert\<OneDrive-szinkron-mappa>\Sajtofigyelo_Incoming"
-```
+2. **Lokális szkript az Outlookból.** A `cowork/save_attachments.ps1` az Outlook
+   desktopból (COM) az `incoming/` mappába mentí a `.docx`-eket. Nem kell hozzá
+   OneDrive-szinkron, se licenc. Regisztrálás egyszer, Windows Task
+   Schedulerbe — a szkript fejében van a parancs.
 
-Ezután a synced docx-ek a projektmappán belül, a bash sandbox számára is
-láthatóan megjelennek, és a `runner.py` a saját python-docx útján dolgozza fel
-őket — hyperlinkekkel együtt. **A `runner.py` `cmd_scan` viszont jelenleg csak az
-`incoming/` mappa közvetlen tartalmát olvassa (nem rekurzívan), tehát a junction
-bekötése után a `scan`-t is módosítani kell** (`runner.py` 338–341. sor,
-`INCOMING.iterdir()` → `INCOMING.rglob("*")`). Ez még nincs megtéve.
+Ha egyik sincs beállítva, a fájlt kézzel kell az `incoming/`-ba tenni. A
+`scan` ekkor is működik, csak nem magától.

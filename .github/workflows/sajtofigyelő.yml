@@ -1,9 +1,16 @@
+# Sajtófigyelő – frissülés-ellenőrzés (watchdog)
+#
+# 2026-08-05: a korábbi verzió BÁRMELY docs/index.html-t érintő commitot
+# frissülésnek vett, tehát egy kozmetikai CSS-javítás 8 napra elhallgattatta a
+# riasztást. Mérve: 2026-08-03-i adat-frissítés + 2026-08-05-i fejléc-commit
+# után egy 08-05-én leálló pipeline csak 08-17-én derült volna ki.
+# Innentől csak az adat-commitokat számolja, a `(+N cikk)` minta alapján.
 name: Sajtófigyelő – heti frissülés ellenőrzése
 
 on:
   schedule:
-    # Hétfő 15:30 UTC = 17:30 magyar idő (a Cowork 16:00-s futása után)
-    - cron: "30 15 * * 1"
+    # Hétfő 17:00 UTC = 19:00 magyar idő — a hétfői Cowork-futás UTÁN.
+    - cron: "0 17 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -21,16 +28,45 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Frissült-e az index.html az elmúlt 8 napban?
+      - name: Kapott-e új cikket az adatbázis az elmúlt 9 napban?
         run: |
-          LAST_COMMIT=$(git log -1 --format="%ct" -- docs/index.html)
-          NOW=$(date +%s)
-          AGE_DAYS=$(( (NOW - LAST_COMMIT) / 86400 ))
-          echo "Utolsó index.html módosítás: $(git log -1 --format='%ci' -- docs/index.html)  (${AGE_DAYS} napja)"
+          set -uo pipefail
 
-          if [ "$AGE_DAYS" -gt 8 ]; then
-            echo "::warning::A sajtófigyelő ${AGE_DAYS} napja NEM frissült!"
-            echo "::warning::Ellenőrizd a Cowork scheduled task futását (hétfő/péntek 16:00)."
+          # Csak az adat-commitok. A minta szándékosan ASCII: a commit-üzenet
+          # ékezetes ("Sajtófigyelő frissítés: … (+14 cikk)"), és a runneren
+          # kívül semmi nem garantálja a locale-t a --grep számára.
+          LAST=$(git log -1 --format='%ct' --extended-regexp \
+                   --grep='\(\+[0-9]+ cikk\)' -- docs/index.html)
+
+          if [ -z "$LAST" ]; then
+            echo "::error::Nem találok egyetlen '(+N cikk)' formátumú commitot sem."
+            echo "::error::Vagy elromlott a commit-üzenet formátuma a runner.py-ban (cmd_apply), vagy a repo története csonka."
             exit 1
           fi
-          echo "✅ Az index.html friss (${AGE_DAYS} napja módosult) – nincs teendő."
+
+          LASTDATE=$(git log -1 --format='%ci' --extended-regexp \
+                       --grep='\(\+[0-9]+ cikk\)' -- docs/index.html)
+          SUBJECT=$(git log -1 --format='%s' --extended-regexp \
+                      --grep='\(\+[0-9]+ cikk\)' -- docs/index.html)
+          AGE_DAYS=$(( ( $(date +%s) - LAST ) / 86400 ))
+
+          # Kereszt-ellenőrzés: a DB-be írt 'generated' dátum. Ha ez régebbi,
+          # mint a commit, akkor a commit nem adatot írt.
+          GEN=$(grep -o '"generated":"[0-9-]\{10\}"' docs/index.html \
+                  | head -1 | cut -d'"' -f4)
+          TOTAL=$(grep -o '"total":[0-9]\+' docs/index.html | head -1 | cut -d: -f2)
+
+          echo "Utolsó ADAT-frissítés : $LASTDATE  (${AGE_DAYS} napja)"
+          echo "  commit             : $SUBJECT"
+          echo "  DB generated       : ${GEN:-<nem található>}"
+          echo "  DB cikkszám        : ${TOTAL:-<nem található>}"
+
+          # 9 nap: a bemenet heti (péntek), a feldolgozás péntek vagy hétfő,
+          # tehát 7 nap normális, 8 még csúszás lehet, 9 fölött már kimaradás.
+          if [ "$AGE_DAYS" -gt 9 ]; then
+            echo "::error::A sajtófigyelő ${AGE_DAYS} napja NEM kapott új cikket."
+            echo "::error::Ellenőrizendő sorrendben: (1) megjött-e a WS Hungary körkép emailben, (2) ott van-e a docx az incoming/-ban, (3) lefutott-e a Cowork scheduled task a gépen, (4) nem járt-e le a github_pat.txt, (5) nem állt-e le az apply 'validáción kiesett' hibával."
+            exit 1
+          fi
+
+          echo "OK — az adatbázis friss (${AGE_DAYS} napja kapott új cikket)."
